@@ -2697,7 +2697,8 @@ public final class LDAPDelete
            "--trustStorePath", "trust-store.jks",
            "--bindDN", "uid=admin,dc=example,dc=com",
            "--bindPasswordFile", "admin-password.txt",
-           "--deleteEntriesMatchingFilter", "(description=delete)"
+           "--deleteEntriesMatchingFilter", "(description=delete)",
+           "--searchBaseDN", "ou=People,dc=example,dc=com"
          },
          INFO_LDAPDELETE_EXAMPLE_3.get());
 

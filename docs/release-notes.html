@@ -27,12 +27,12 @@ ${TARGET="offline"}                <br>
                   trust manager that can be used to verify the signatures in a presented
                   certificate chain.  If the chain includes a self-signed certificate, then it will
                   ensure that it has a valid signature, and if the chain includes multiple
-                  certificates, it will ensure that each subsequent certificate in the chain is the
-                  correct signer for the previous certificate in that chain.  Note that this does
-                  not perform any other validation and should only be used specifically for
-                  validating signatures in a certificate chain, so it is recommended to use it only
-                  in an AggregateTrustManager that combines this logic with other appropraite forms
-                  of trust processing.
+                  certificates, it will ensure that the certificates actually representa a valid
+                  issuer chain, with valid signatures and no unrelated certificates.  Note that
+                  this does not perform any other validation and should only be used specifically
+                  for validating signatures in a certificate chain, so it is recommended to use it
+                  only in an AggregateTrustManager that combines this logic with other appropraite
+                  forms of trust processing.
                   <br><br>
                 </li>
               </ul>

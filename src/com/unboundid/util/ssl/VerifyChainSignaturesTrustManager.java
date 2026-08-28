@@ -39,6 +39,9 @@ package com.unboundid.util.ssl;
 
 import java.io.Serializable;
 import java.security.cert.CertificateException;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
 import javax.net.ssl.X509TrustManager;
 
 import com.unboundid.util.Debug;
@@ -57,9 +60,14 @@ import static com.unboundid.util.ssl.SSLMessages.*;
 /**
  * This class provides an X.509 trust manager implementation that can be used to
  * verify signatures in a certificate chain.  It will verify that self-signed
- * certificates have valid signatures, and that in a multi-certificate chain,
- * each subsequent certificate in the chain is the correct signer for the
- * previous certificate in that chain.
+ * certificates have valid signatures, and that if multiple certificates are
+ * provided, they form a valid chain in which each subsequent certificate has
+ * signed the previous certificate.  This implementation is somewhat lenient
+ * when it comes to certificate order:  the first certificate must be the
+ * end-entity certificate, but subsequent certificates can appear in any order.
+ * Further, if the chain includes duplicate certificates, then the duplicates
+ * will be ignored so that only one instance of each certificate will be
+ * examined.
  * <BR><BR>
  * Note that this trust manager should not be used on its own, since it only
  * validates the certificate chain that was actually presented by the peer.
@@ -181,107 +189,187 @@ public final class VerifyChainSignaturesTrustManager
                     @NotNull final java.security.cert.X509Certificate[] chain)
            throws CertificateException
   {
-    // If the provided chain is null or empty, then we can't perform any
-    // validation, so we'll have to consider it acceptable.
+    // If the provided chain is null or empty, then we will not accept the
+    // certificate chain.
     if ((chain == null) || (chain.length < 1))
     {
-      return;
+      throw new CertificateException(
+           ERR_VERIFY_CHAIN_SIGNATURES_TRUST_NO_CHAIN.get());
     }
 
 
     // Convert the certificates in the provided chain to use the LDAP SDK's
-    // representation of the certificates.
-    final X509Certificate[] sdkChain = new X509Certificate[chain.length];
-    for (int i=0; i < chain.length; i++)
+    // representation of the certificates.  The first certificate is one that
+    // we will treat as the end-entity certificate, and the others will be
+    // treated as potential issuers.  Technically, they should be in the right
+    // order, but we'll be lenient in that regard.
+    final X509Certificate endEntityCertificate = parseCertificate(
+         chain[0].getEncoded(),
+         String.valueOf(chain[0].getSubjectX500Principal()),  0);
+    final Set<X509Certificate> issuerCertificates = new HashSet<>();
+    for (int i=1; i < chain.length; i++)
     {
-      try
-      {
-        sdkChain[i] = new X509Certificate(chain[i].getEncoded());
-      }
-      catch (final Exception e)
-      {
-        Debug.debugException(e);
-        throw new CertificateException(
-             ERR_ISSUER_CHAIN_TRUST_CANNOT_PARSE_CERT.get(
-                  String.valueOf(chain[i].getSubjectX500Principal()), i,
-                  StaticUtils.getExceptionMessage(e)));
-      }
+      issuerCertificates.add(parseCertificate(chain[i].getEncoded(),
+         String.valueOf(chain[i].getSubjectX500Principal()),  i));
     }
 
 
-    // If the chain only contains a single certificate, then check to see if
-    // it's self-signed.  If so, then validate its signature.  If not, then we
-    // can't perform any validation.
-    if (sdkChain.length == 1)
+    // If the end-entity certificate happened to be included multiple times in
+    // the chain, then remove it from the set of issuer certificates.
+    issuerCertificates.remove(endEntityCertificate);
+
+
+    // If the end-entity certificate is self-signed, then validate its
+    // signature.  Also, make sure that the chain didn't include any other
+    // certificates, since they wouldn't be related to the chain.
+    if (endEntityCertificate.isSelfSigned())
     {
-      if (sdkChain[0].isSelfSigned())
-      {
         try
         {
-          sdkChain[0].verifySignature(sdkChain[0]);
+          endEntityCertificate.verifySignature(endEntityCertificate);
         }
         catch (final CertException e)
         {
           Debug.debugException(e);
           throw new CertificateException(e.getMessage(), e);
         }
-      }
-      else
+
+        if (! issuerCertificates.isEmpty())
+        {
+          throw new CertificateException(
+               ERR_VERIFY_CHAIN_SIGNATURES_TRUST_UNRELATED_CERTS.get(
+                    String.valueOf(endEntityCertificate.getSubjectDN())));
+        }
+
+        return;
+    }
+
+
+    // If the chain only has a single certificate, then we don't need to
+    // perform any other validation.  This can happen if the end-entity
+    // certificate is self-signed (which we've already accounted for), or if
+    // we're supposed to be able to complete the chain from a known set of
+    // trusted issuers (which is outside the scope of this trust manager).
+    if (issuerCertificates.isEmpty())
+    {
+      return;
+    }
+
+
+    // At this point, we know that the end-entity certificate isn't self-signed,
+    // and that at least one more certificate was included in the presented
+    // chain.  Make sure that we can form a chain from the presented
+    // certificates.
+    X509Certificate previousCertificate = endEntityCertificate;
+    while (! issuerCertificates.isEmpty())
+    {
+      // Try to find the issuer of the certificate we most recently examined.
+      boolean foundIssuer = false;
+      final Iterator<X509Certificate> iterator = issuerCertificates.iterator();
+      while (iterator.hasNext())
       {
+        final X509Certificate potentialIssuer = iterator.next();
+        if (potentialIssuer.isIssuerFor(previousCertificate))
+        {
+          try
+          {
+            previousCertificate.verifySignature(potentialIssuer);
+            previousCertificate = potentialIssuer;
+            iterator.remove();
+            foundIssuer = true;
+          }
+          catch (final Exception e)
+          {
+            Debug.debugException(e);
+            throw new CertificateException(
+                 ERR_VERIFY_CHAIN_SIGNATURES_ISSUER_SIGNATURE_INVALID.get(
+                      String.valueOf(previousCertificate.getSubjectDN()),
+                      String.valueOf(potentialIssuer.getSubjectDN())),
+                 e);
+          }
+        }
+      }
+
+
+      // If we didn't find the issuer in the set of certificates, then that's an
+      // error.
+      if (! foundIssuer)
+      {
+        throw new CertificateException(
+             ERR_VERIFY_CHAIN_SIGNATURES_COULD_NOT_FIND_ISSUER.get(
+                  String.valueOf(previousCertificate.getSubjectDN())));
+      }
+
+
+      // If the issuer certificate is self-signed, then make sure that its
+      // signature is valid, and also that there aren't any other remaining
+      // certificates.
+      if (previousCertificate.isSelfSigned())
+      {
+        try
+        {
+          previousCertificate.verifySignature(previousCertificate);
+        }
+        catch (final CertException e)
+        {
+          Debug.debugException(e);
+          throw new CertificateException(e.getMessage(), e);
+        }
+
+        if (! issuerCertificates.isEmpty())
+        {
+          throw new CertificateException(
+               ERR_VERIFY_CHAIN_SIGNATURES_TRUST_UNRELATED_CERTS.get(
+                    String.valueOf(endEntityCertificate.getSubjectDN())));
+        }
+
         return;
       }
     }
 
 
-    // Iterate through the chain, ensuring that each subsequent certificate is
-    // the issuer for the previous one.
-    X509Certificate previousCertificate = sdkChain[0];
-    for (int i=1; i < sdkChain.length; i++)
-    {
-      final X509Certificate subsequentCertificate = sdkChain[i];
+    // If we've gotten here, then it means that we've gone through all of the
+    // issuers included in the chain, and that the last certificate we found
+    // wasn't self-signed.  This just means that the peer didn't provide the
+    // complete certificate chain, and expects us to complete it from a set of
+    // trusted issuers.  That's outside the scope of this trust manager, so
+    // we're fine exiting without throwing an exception.
+  }
 
-      // If the previous certificate is self-signed, then the subsequent
-      // certificate can't be its issuer.
-      if (previousCertificate.isSelfSigned())
+
+
+  /**
+   * Parses the contents of the provided byte array as an X.509 certificate.
+   *
+   * @param  certBytes      The byte array containing the certificate data to
+   *                        parse.
+   * @param  certSubjectDN  The string representation of the expected subject DN
+   *                        for the certificate.
+   * @param  index          The index of the certificate in the chain.
+   *
+   * @return  The parsed certificate.
+   *
+   * @throws  CertificateException  If the contents of the provided byte array
+   *                                can't be parsed as an X.509 certificate.
+   */
+  @NotNull()
+  static X509Certificate parseCertificate(
+              @NotNull final byte[] certBytes,
+              @NotNull final String certSubjectDN,
+              final int index)
+         throws CertificateException
+  {
+      try
       {
+        return new X509Certificate(certBytes);
+      }
+      catch (final Exception e)
+      {
+        Debug.debugException(e);
         throw new CertificateException(
-             ERR_ISSUER_CHAIN_TRUST_NON_FINAL_SELF_SIGNED.get(
-                  String.valueOf(previousCertificate.getSubjectDN()),
-                  (i-1), sdkChain.length,
-                  String.valueOf(subsequentCertificate.getSubjectDN())));
+             ERR_VERIFY_CHAIN_SIGNATURES_TRUST_CANNOT_PARSE_CERT.get(
+                  certSubjectDN, index, StaticUtils.getExceptionMessage(e)));
       }
-
-
-      // Ensure that the previous certificate is actually signed by the
-      // subsequent certificate.
-      try
-      {
-        previousCertificate.verifySignature(subsequentCertificate);
-      }
-      catch (final CertException e)
-      {
-        Debug.debugException(e);
-        throw new CertificateException(e.getMessage(), e);
-      }
-
-      previousCertificate = subsequentCertificate;
-    }
-
-
-    // If the last certificate in the chain is self-signed, then verify its
-    // signature.
-    if (previousCertificate.isSelfSigned())
-    {
-      try
-      {
-        previousCertificate.verifySignature(previousCertificate);
-      }
-      catch (final CertException e)
-      {
-        Debug.debugException(e);
-        throw new CertificateException(e.getMessage(), e);
-      }
-    }
   }
 
 

@@ -79,19 +79,19 @@ public final class VerifyChainSignaturesTrustManagerTestCase
          throws Exception
   {
     // Generate a self-signed certificate in its own keystore.
-    final File selfSignedCerteyStoreFile = createTempFile();
-    assertTrue(selfSignedCerteyStoreFile.delete());
+    final File selfSignedCertKeyStoreFile = createTempFile();
+    assertTrue(selfSignedCertKeyStoreFile.delete());
 
     manageCertificates(
          "generate-self-signed-certificate",
-         "--keystore", selfSignedCerteyStoreFile.getAbsolutePath(),
+         "--keystore", selfSignedCertKeyStoreFile.getAbsolutePath(),
          "--keystore-password", "password",
          "--alias", "server-cert",
          "--subject-dn", "CN=ldap.example.com,O=Example Corp,C=US");
 
 
     // Create an in-memory directory server instance with the new key store.
-    try (InMemoryDirectoryServer ds = createServer(selfSignedCerteyStoreFile))
+    try (InMemoryDirectoryServer ds = createServer(selfSignedCertKeyStoreFile))
     {
       final SSLUtil sslUtil =
            new SSLUtil(VerifyChainSignaturesTrustManager.getInstance());
@@ -502,6 +502,111 @@ public final class VerifyChainSignaturesTrustManagerTestCase
     {
       // This was expected.
     }
+
+
+    // Test the full three-certificate chain with the second and third
+    // certificates in the wrong order.  Strictly speaking, this should be
+    // invalid, but we'll be lenient and accept it, since that's the behavior
+    // that many other validators exhibit.
+    final X509Certificate[] fullMisorderedChain =
+    {
+      fullChain[0],
+      fullChain[2],
+      fullChain[1]
+    };
+
+    trustManager.checkClientTrusted(fullMisorderedChain, null);
+    trustManager.checkServerTrusted(fullMisorderedChain, null);
+
+
+    // Test the full chain with duplicate copies of the certificates.
+    // Strictly speaking, this should be invalid, but we'll be lenient and
+    // accept it, since that's the behavior that many other validators exhibit.
+    final X509Certificate[] fullChainWithDuplicates =
+    {
+      fullChain[0],
+      fullChain[1],
+      fullChain[2],
+      fullChain[0],
+      fullChain[1],
+      fullChain[2]
+    };
+
+    trustManager.checkClientTrusted(fullChainWithDuplicates, null);
+    trustManager.checkServerTrusted(fullChainWithDuplicates, null);
+
+
+    // Test the full misordered chain with duplicate copies of the certificates.
+    // Strictly speaking, this should be invalid, but we'll be lenient and
+    // accept it, since that's the behavior that many other validators exhibit.
+    final X509Certificate[] fullMisorderedChainWithDuplicates =
+    {
+      fullChain[0],
+      fullChain[2],
+      fullChain[1],
+      fullChain[2],
+      fullChain[1],
+      fullChain[0]
+    };
+
+    trustManager.checkClientTrusted(fullMisorderedChainWithDuplicates, null);
+    trustManager.checkServerTrusted(fullMisorderedChainWithDuplicates, null);
+
+
+    // Generate an additional self-signed certificate that isn't actually
+    // related to the end-entity certificate.  Include it at the end of the
+    // chain and verify that it is not accepted.
+    final File additionalSelfSignedCertKeyStoreFile = createTempFile();
+    assertTrue(additionalSelfSignedCertKeyStoreFile.delete());
+
+    final File additionalSelfSignedCertPEMFile = createTempFile();
+    assertTrue(additionalSelfSignedCertPEMFile.delete());
+
+    manageCertificates(
+         "generate-self-signed-certificate",
+         "--keystore", additionalSelfSignedCertKeyStoreFile.getAbsolutePath(),
+         "--keystore-password", "password",
+         "--alias", "other-cert",
+         "--subject-dn", "CN=other.example.com,O=Example Corp,C=US",
+         "--output-file", additionalSelfSignedCertPEMFile.getAbsolutePath(),
+         "--output-format", "PEM");
+
+    final X509Certificate[] additionalCertChain = createCertificateChain(
+         additionalSelfSignedCertPEMFile);
+    assertNotNull(additionalCertChain);
+    assertEquals(additionalCertChain.length, 1);
+
+    final X509Certificate[] fullChainWithAdditionalUnrelatedCert =
+    {
+      fullChain[0],
+      fullChain[1],
+      fullChain[2],
+      additionalCertChain[0]
+    };
+
+    try
+    {
+      trustManager.checkClientTrusted(fullChainWithAdditionalUnrelatedCert,
+           null);
+      fail("Expected a checkClientTrusted failure from a chain with an " +
+           "unrelated extra certificate.");
+    }
+    catch (final CertificateException e)
+    {
+      // This was expected.
+    }
+
+    try
+    {
+      trustManager.checkServerTrusted(fullChainWithAdditionalUnrelatedCert,
+           null);
+      fail("Expected a checkServerTrusted failure from a chain with an " +
+           "unrelated extra certificate.");
+    }
+    catch (final CertificateException e)
+    {
+      // This was expected.
+    }
   }
 
 
@@ -682,8 +787,28 @@ public final class VerifyChainSignaturesTrustManagerTestCase
   {
     final VerifyChainSignaturesTrustManager trustManager =
          VerifyChainSignaturesTrustManager.getInstance();
-    trustManager.checkClientTrusted(null, null);
-    trustManager.checkServerTrusted(null, null);
+
+    try
+    {
+      trustManager.checkClientTrusted(null, null);
+      fail("Expected a checkClientTrusted failure from a null certificate " +
+           "chain.");
+    }
+    catch (final CertificateException e)
+    {
+      // This was expected.
+    }
+
+    try
+    {
+      trustManager.checkServerTrusted(null, null);
+      fail("Expected a checkServerTrusted failure from a null certificate " +
+           "chain.");
+    }
+    catch (final CertificateException e)
+    {
+      // This was expected.
+    }
   }
 
 
@@ -703,8 +828,52 @@ public final class VerifyChainSignaturesTrustManagerTestCase
 
     final VerifyChainSignaturesTrustManager trustManager =
          VerifyChainSignaturesTrustManager.getInstance();
-    trustManager.checkClientTrusted(emptyChain, null);
-    trustManager.checkServerTrusted(emptyChain, null);
+
+    try
+    {
+      trustManager.checkClientTrusted(emptyChain, null);
+      fail("Expected a checkClientTrusted failure from an empty certificate " +
+           "chain.");
+    }
+    catch (final CertificateException e)
+    {
+      // This was expected.
+    }
+
+    try
+    {
+      trustManager.checkServerTrusted(emptyChain, null);
+      fail("Expected a checkServerTrusted failure from an empty certificate " +
+           "chain.");
+    }
+    catch (final CertificateException e)
+    {
+      // This was expected.
+    }
+  }
+
+
+
+  /**
+   * Provides test coverage for an attempt to parse a malformed certificate.
+   *
+   * @throws  Exception  If an unexpected problem occurs.
+   */
+  @Test()
+  public void testParseMalformedCertificate()
+         throws Exception
+  {
+    try
+    {
+      VerifyChainSignaturesTrustManager.parseCertificate(
+           StaticUtils.getBytes("malformed"),
+           "CN=malformed,O=Example Corp,C=US",
+           0);
+    }
+    catch (final CertificateException e)
+    {
+      // This was expected.
+    }
   }
 
 

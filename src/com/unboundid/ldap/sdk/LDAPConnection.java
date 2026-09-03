@@ -47,6 +47,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Timer;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
@@ -276,6 +277,10 @@ public final class LDAPConnection
   // applicable.
   @Nullable private AbstractConnectionPool connectionPool;
 
+  // A counter that will be used to keep track of the next message ID to use for
+  // this connection.
+  @NotNull private final AtomicInteger nextMessageIDCounter;
+
   // The disconnect information for this connection.
   @NotNull private final AtomicReference<DisconnectInfo> disconnectInfo;
 
@@ -462,6 +467,7 @@ public final class LDAPConnection
     connectionName       = null;
     connectionPoolName   = null;
     cachedSchema         = null;
+    nextMessageIDCounter = new AtomicInteger(0);
     timer                = null;
     serverSet            = null;
 
@@ -4683,7 +4689,16 @@ public final class LDAPConnection
     }
     else
     {
-      return internals.nextMessageID();
+      final int msgID =
+           (nextMessageIDCounter.incrementAndGet() & 0x7F_FF_FF_FF);
+      if (msgID == 0)
+      {
+        return (nextMessageIDCounter.incrementAndGet() & 0x7F_FF_FF_FF);
+      }
+      else
+      {
+        return msgID;
+      }
     }
   }
 

@@ -43,7 +43,6 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.util.logging.Level;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.SocketFactory;
@@ -86,10 +85,6 @@ final class LDAPConnectionInternals
        ASN1_BUFFERS = new AtomicReference<>(new ThreadLocal<ASN1Buffer>());
 
 
-
-  // The counter that will be used to obtain the next message ID to use when
-  // sending requests to the server.
-  @NotNull private final AtomicInteger nextMessageID;
 
   // Indicates whether to operate in synchronous mode.
   private final boolean synchronousMode;
@@ -170,7 +165,6 @@ final class LDAPConnectionInternals
     }
 
     connectTime     = System.currentTimeMillis();
-    nextMessageID   = new AtomicInteger(0);
     synchronousMode = options.useSynchronousMode();
     saslClient      = null;
     socket          = null;
@@ -448,38 +442,6 @@ final class LDAPConnectionInternals
   {
     this.saslClient = saslClient;
     connectionReader.applySASLQoP(saslClient);
-  }
-
-
-
-  /**
-   * Retrieves the message ID that should be used for the next message to send
-   * to the directory server.
-   *
-   * @return  The message ID that should be used for the next message to send to
-   *          the directory server.
-   */
-  int nextMessageID()
-  {
-    int msgID = nextMessageID.incrementAndGet();
-    if (msgID > 0)
-    {
-      return msgID;
-    }
-
-    while (true)
-    {
-      if (nextMessageID.compareAndSet(msgID, 1))
-      {
-        return 1;
-      }
-
-      msgID = nextMessageID.incrementAndGet();
-      if (msgID > 0)
-      {
-        return msgID;
-      }
-    }
   }
 
 
@@ -856,8 +818,6 @@ final class LDAPConnectionInternals
     buffer.append(port);
     buffer.append(", connected=");
     buffer.append((socket != null) && socket.isConnected());
-    buffer.append(", nextMessageID=");
-    buffer.append(nextMessageID.get());
     buffer.append(')');
   }
 }

@@ -214,7 +214,7 @@ public class LDAPConnectionOptionsTestCase
 
     final LDAPConnectionOptions dup = opts.duplicate();
 
-    assertEquals(dup.autoReconnect(), opts.autoReconnect());
+    assertFalse(dup.autoReconnect());
     assertEquals(dup.bindWithDNRequiresPassword(),
                  opts.bindWithDNRequiresPassword());
     assertEquals(dup.captureConnectStackTrace(),
@@ -257,13 +257,17 @@ public class LDAPConnectionOptionsTestCase
   @SuppressWarnings("deprecation")
   public void testAutoReconnect()
   {
+    // NOTE:  Auto-reconnect functionality has been completely disabled in the
+    // LDAP SDK.  The LDAPConnectionOptions.autoReconnect method now always
+    // returns false, and the LDAPConnectionOptions.setAutoReconnect method no
+    // longer has any effect.
     final LDAPConnectionOptions opts = new LDAPConnectionOptions();
 
     assertFalse(opts.autoReconnect());
     assertNotNull(opts.toString());
 
     opts.setAutoReconnect(true);
-    assertTrue(opts.autoReconnect());
+    assertFalse(opts.autoReconnect());
     assertNotNull(opts.toString());
 
     opts.setAutoReconnect(false);

@@ -14,11 +14,16 @@ ${TARGET="offline"}                <br>
 
               <ul>
                 <li>
-                  Updated the collect-support-data tool, extended request, and administrative task
-                  to add an option to exclude Java Flight Recorder data from the resulting archive.
-                  This may be useful in cases where it is desirable to make collect-support-data
-                  processing operate as quickly as possible, or to minimize the size of the
-                  generated archive.
+                  Permanently disabled auto-reconnect functionality in the LDAP SDK.  This
+                  capability had been deprecated for over ten years, as it was very fragile and
+                  could only work under limited circumstances.  The autoReconnect() and
+                  setAutoReconnect() methods in the LDAPConnectionOptions class are still in place
+                  to preserve API compatibility, but the autoReconnect() method now always returns
+                  a hard-coded value of false, and the setAutoReconnect() method now has no effect.
+                  In cases where automatic retry functionality is desired, you should use a
+                  connection pool instead of an individual connection, using the pool's
+                  setRetryFailedOperationsDueToInvalidConnections() method to enable automatic
+                  retry, and use the pool's LDAPInterface methods to process operations.
                   <br><br>
                 </li>
 
@@ -33,6 +38,15 @@ ${TARGET="offline"}                <br>
                   for validating signatures in a certificate chain, so it is recommended to use it
                   only in an AggregateTrustManager that combines this logic with other appropraite
                   forms of trust processing.
+                  <br><br>
+                </li>
+
+                <li>
+                  Updated the collect-support-data tool, extended request, and administrative task
+                  to add an option to exclude Java Flight Recorder data from the resulting archive.
+                  This may be useful in cases where it is desirable to make collect-support-data
+                  processing operate as quickly as possible, or to minimize the size of the
+                  generated archive.
                   <br><br>
                 </li>
               </ul>

@@ -416,17 +416,6 @@ public final class LDAPThreadLocalConnectionPool
     c.setConnectionPool(this);
 
 
-    // Auto-reconnect must be disabled for pooled connections, so turn it off
-    // if the associated connection options have it enabled for some reason.
-    LDAPConnectionOptions opts = c.getConnectionOptions();
-    if (opts.autoReconnect())
-    {
-      opts = opts.duplicate();
-      opts.setAutoReconnect(false);
-      c.setConnectionOptions(opts);
-    }
-
-
     // Invoke pre-authentication post-connect processing.
     if (postConnectProcessor != null)
     {
@@ -564,6 +553,7 @@ public final class LDAPThreadLocalConnectionPool
 
 
     // Get the pooled schema if appropriate.
+    final LDAPConnectionOptions opts = c.getConnectionOptions();
     if (opts.usePooledSchema())
     {
       final long currentTime = System.currentTimeMillis();

@@ -500,21 +500,8 @@ final class LDAPConnectionInternals
   {
     if (! isConnected())
     {
-      final LDAPConnectionOptions connectionOptions =
-           connection.getConnectionOptions();
-      @SuppressWarnings("deprecation")
-      final boolean autoReconnect = connectionOptions.autoReconnect();
-      final boolean closeRequested = connection.closeRequested();
-      if (autoReconnect && (! closeRequested))
-      {
-        connection.reconnect();
-        connection.registerResponseAcceptor(messageID,  responseAcceptor);
-      }
-      else
-      {
-        throw new LDAPException(ResultCode.SERVER_DOWN,
-                                ERR_CONN_NOT_ESTABLISHED.get());
-      }
+      throw new LDAPException(ResultCode.SERVER_DOWN,
+           ERR_CONN_NOT_ESTABLISHED.get());
     }
 
     connectionReader.registerResponseAcceptor(messageID, responseAcceptor);
@@ -543,13 +530,11 @@ final class LDAPConnectionInternals
    *                            block while trying to send the request.  If this
    *                            is less than or equal to zero, then no send
    *                            timeout will be enforced.
-   * @param  allowRetry         Indicates whether to allow retrying the send
-   *                            after a reconnect.
    *
    * @throws  LDAPException  If a problem occurs while sending the message.
    */
   void sendMessage(@NotNull final LDAPMessage message,
-                   final long sendTimeoutMillis, final boolean allowRetry)
+                   final long sendTimeoutMillis)
        throws LDAPException
   {
     if (! isConnected())
@@ -610,29 +595,11 @@ final class LDAPConnectionInternals
       if (os == null)
       {
         // If the message was an unbind request, then we don't care that it
-        // didn't get sent.  Otherwise, fail the send attempt but try to
-        // reconnect first if appropriate.
+        // didn't get sent.  Otherwise, fail the send attempt.
         if (message.getProtocolOpType() ==
              LDAPMessage.PROTOCOL_OP_TYPE_UNBIND_REQUEST)
         {
           return;
-        }
-
-        final boolean closeRequested = connection.closeRequested();
-        if (allowRetry && (! closeRequested) &&
-             (! connection.synchronousMode()))
-        {
-          connection.reconnect();
-
-          try
-          {
-            sendMessage(message, sendTimeoutMillis, false);
-            return;
-          }
-          catch (final Exception e)
-          {
-            Debug.debugException(e);
-          }
         }
 
         throw new LDAPException(ResultCode.SERVER_DOWN,
@@ -671,28 +638,11 @@ final class LDAPConnectionInternals
       Debug.debugException(ioe);
 
       // If the message was an unbind request, then we don't care that it
-      // didn't get sent.  Otherwise, fail the send attempt but try to reconnect
-      // first if appropriate.
+      // didn't get sent.  Otherwise, fail the send attempt.
       if (message.getProtocolOpType() ==
           LDAPMessage.PROTOCOL_OP_TYPE_UNBIND_REQUEST)
       {
         return;
-      }
-
-      final boolean closeRequested = connection.closeRequested();
-      if (allowRetry && (! closeRequested) && (! connection.synchronousMode()))
-      {
-        connection.reconnect();
-
-        try
-        {
-          sendMessage(message, sendTimeoutMillis, false);
-          return;
-        }
-        catch (final Exception e)
-        {
-          Debug.debugException(e);
-        }
       }
 
       throw new LDAPException(ResultCode.SERVER_DOWN,

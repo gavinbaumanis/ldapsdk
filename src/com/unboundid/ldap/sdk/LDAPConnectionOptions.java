@@ -241,14 +241,6 @@ public final class LDAPConnectionOptions
 
 
   /**
-   * The default value ({@code false}) for the setting that controls whether to
-   * automatically attempt to reconnect if a connection is unexpectedly lost.
-   */
-  private static final boolean DEFAULT_AUTO_RECONNECT = false;
-
-
-
-  /**
    * The name of a system property that can be used to specify the initial
    * default value for the "bind with DN requires password" behavior.  If this
    * property is set at the time that this class is loaded, then its value must
@@ -1216,10 +1208,6 @@ public final class LDAPConnectionOptions
   // socket factory instance associated with a connection or set of connections.
   private boolean allowConcurrentSocketFactoryUse;
 
-  // Indicates whether the connection should attempt to automatically reconnect
-  // if the connection to the server is lost.
-  private boolean autoReconnect;
-
   // Indicates whether to allow simple binds that contain a DN but no password.
   private boolean bindWithDNRequiresPassword;
 
@@ -1315,7 +1303,6 @@ public final class LDAPConnectionOptions
   public LDAPConnectionOptions()
   {
     abandonOnTimeout               = DEFAULT_ABANDON_ON_TIMEOUT;
-    autoReconnect                  = DEFAULT_AUTO_RECONNECT;
     bindWithDNRequiresPassword     = DEFAULT_BIND_WITH_DN_REQUIRES_PASSWORD;
     captureConnectStackTrace       = DEFAULT_CAPTURE_CONNECT_STACK_TRACE;
     followReferrals                = DEFAULT_FOLLOW_REFERRALS;
@@ -1365,7 +1352,6 @@ public final class LDAPConnectionOptions
 
     o.abandonOnTimeout                = abandonOnTimeout;
     o.allowConcurrentSocketFactoryUse = allowConcurrentSocketFactoryUse;
-    o.autoReconnect                   = autoReconnect;
     o.bindWithDNRequiresPassword      = bindWithDNRequiresPassword;
     o.captureConnectStackTrace        = captureConnectStackTrace;
     o.followReferrals                 = followReferrals;
@@ -1403,67 +1389,61 @@ public final class LDAPConnectionOptions
 
   /**
    * Indicates whether associated connections should attempt to automatically
-   * reconnect to the target server if the connection is lost.  Note that this
-   * option will not have any effect on pooled connections because defunct
-   * pooled connections will be replaced by newly-created connections rather
-   * than attempting to re-establish the existing connection.
+   * reconnect to the target server if the connection is lost.
    * <BR><BR>
-   * NOTE:  The use of auto-reconnect is strongly discouraged because it is
-   * inherently fragile and can only work under very limited circumstances.  It
-   * is strongly recommended that a connection pool be used instead of the
-   * auto-reconnect option, even in cases where only a single connection is
-   * desired.
+   * NOTE:  The LDAP SDK's auto-reconnect functionality has been permanently
+   * disabled after having been previously deprecated for over ten years.
+   * The auto-reconnect functionality was inherently fragile and could have only
+   * worked under very limited circumstances.  In cases where automatic retry
+   * functionality is desired, a connection pool should be used instead of an
+   * individual connection.
    *
-   * @return  {@code true} if associated connections should attempt to
-   *          automatically reconnect to the target server if the connection is
-   *          lost, or {@code false} if not.
+   * @return  {@code false} to indicate that auto-reconnect is not enabled.
    *
-   * @deprecated  The use of auto-reconnect is strongly discouraged because it
-   *              is inherently fragile and can only work under very limited
-   *              circumstances.  It is strongly recommended that a connection
-   *              pool be used instead of the auto-reconnect option, even in
-   *              cases where only a single connection is desired.
+   * @deprecated  The use of auto-reconnect functionality has been permanently
+   *              disabled after having been deprecated for over ten years.  The
+   *              methods previously available to control it have been left in
+   *              place to preserve API compatibility, but they no longer have
+   *              any effect on the LDAP SDK's behavior.  In cases where
+   *              automatic retry functionality is desired, a connection pool
+   *              should be used instead of an individual connection.
    */
   @Deprecated()
   public boolean autoReconnect()
   {
-    return autoReconnect;
+    return false;
   }
 
 
 
   /**
    * Specifies whether associated connections should attempt to automatically
-   * reconnect to the target server if the connection is lost.  Note that
-   * automatic reconnection will only be available for authenticated clients if
-   * the authentication mechanism used provides support for re-binding on a new
-   * connection.  Also note that this option will not have any effect on pooled
-   * connections because defunct pooled connections will be replaced by
-   * newly-created connections rather than attempting to re-establish the
-   * existing connection.  Further, auto-reconnect should not be used with
-   * connections that use StartTLS or some other mechanism to alter the state
-   * of the connection beyond authentication.
+   * reconnect to the target server if the connection is lost.
    * <BR><BR>
-   * NOTE:  The use of auto-reconnect is strongly discouraged because it is
-   * inherently fragile and can only work under very limited circumstances.  It
-   * is strongly recommended that a connection pool be used instead of the
-   * auto-reconnect option, even in cases where only a single connection is
-   * desired.
+   * NOTE:  The LDAP SDK's auto-reconnect functionality has been permanently
+   * disabled after having been previously deprecated for over ten years, so
+   * this method no longer has any effect.  The auto-reconnect functionality was
+   * inherently fragile and could have only worked under very limited
+   * circumstances.  In cases where automatic retry functionality is desired, a
+   * connection pool should be used instead of an individual connection.
    *
    * @param  autoReconnect  Specifies whether associated connections should
    *                        attempt to automatically reconnect to the target
-   *                        server if the connection is lost.
+   *                        server if the connection is lost.  This argument
+   *                        will now be ignored.
    *
-   * @deprecated  The use of auto-reconnect is strongly discouraged because it
-   *              is inherently fragile and can only work under very limited
-   *              circumstances.  It is strongly recommended that a connection
-   *              pool be used instead of the auto-reconnect option, even in
-   *              cases where only a single connection is desired.
+   * @deprecated  The use of auto-reconnect functionality has been permanently
+   *              disabled after having been deprecated for over ten years.  The
+   *              methods previously available to control it have been left in
+   *              place to preserve API compatibility, but they no longer have
+   *              any effect on the LDAP SDK's behavior.  In cases where
+   *              automatic retry functionality is desired, a connection pool
+   *              should be used instead of an individual connection.
    */
   @Deprecated()
   public void setAutoReconnect(final boolean autoReconnect)
   {
-    this.autoReconnect = autoReconnect;
+    // No implementation is needed.
   }
 
 
@@ -2560,9 +2540,7 @@ public final class LDAPConnectionOptions
    */
   public void toString(@NotNull final StringBuilder buffer)
   {
-    buffer.append("LDAPConnectionOptions(autoReconnect=");
-    buffer.append(autoReconnect);
-    buffer.append(", nameResolver=");
+    buffer.append("LDAPConnectionOptions(autoReconnect=false, nameResolver=");
     nameResolver.toString(buffer);
     buffer.append(", bindWithDNRequiresPassword=");
     buffer.append(bindWithDNRequiresPassword);

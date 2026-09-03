@@ -83,7 +83,7 @@ import static com.unboundid.util.ssl.SSLMessages.*;
  */
 @NotMutable()
 @ThreadSafety(level=ThreadSafetyLevel.COMPLETELY_THREADSAFE)
-public final class VerifyChainSignaturesTrustManager
+  public final class VerifyChainSignaturesTrustManager
        implements X509TrustManager, Serializable
 {
   /**

@@ -47,7 +47,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Timer;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
@@ -277,9 +276,6 @@ public final class LDAPConnection
   // applicable.
   @Nullable private AbstractConnectionPool connectionPool;
 
-  // Indicates whether to perform a reconnect before the next write.
-  @NotNull private final AtomicBoolean needsReconnect;
-
   // The disconnect information for this connection.
   @NotNull private final AtomicReference<DisconnectInfo> disconnectInfo;
 
@@ -420,7 +416,6 @@ public final class LDAPConnection
   public LDAPConnection(@Nullable final SocketFactory socketFactory,
                         @Nullable final LDAPConnectionOptions connectionOptions)
   {
-    needsReconnect = new AtomicBoolean(false);
     disconnectInfo = new AtomicReference<>();
     lastCommunicationTime = -1L;
 
@@ -906,7 +901,6 @@ public final class LDAPConnection
   {
     Validator.ensureNotNull(host, inetAddress, port);
 
-    needsReconnect.set(false);
     hostPort = host + ':' + port;
     lastCommunicationTime = -1L;
     startTLSRequest = null;
@@ -981,7 +975,6 @@ public final class LDAPConnection
   public void reconnect()
          throws LDAPException
   {
-    needsReconnect.set(false);
     if ((System.currentTimeMillis() - lastReconnectTime) < 1000L)
     {
       // If the last reconnect attempt was less than 1 second ago, then abort.
@@ -1067,17 +1060,6 @@ public final class LDAPConnection
 
 
   /**
-   * Sets a flag indicating that the connection should be re-established before
-   * sending the next request.
-   */
-  void setNeedsReconnect()
-  {
-    needsReconnect.set(true);
-  }
-
-
-
-  /**
    * {@inheritDoc}
    */
   @Override()
@@ -1096,7 +1078,7 @@ public final class LDAPConnection
       return false;
     }
 
-    return (! needsReconnect.get());
+    return true;
   }
 
 
@@ -4670,11 +4652,6 @@ public final class LDAPConnection
                    final long sendTimeoutMillis)
          throws LDAPException
   {
-    if (needsReconnect.compareAndSet(true, false))
-    {
-      reconnect();
-    }
-
     final LDAPConnectionInternals internals = connectionInternals;
     if (internals == null)
     {
@@ -4683,9 +4660,7 @@ public final class LDAPConnection
     }
     else
     {
-      @SuppressWarnings("deprecation")
-      final boolean autoReconnect = connectionOptions.autoReconnect();
-      internals.sendMessage(message, sendTimeoutMillis, autoReconnect);
+      internals.sendMessage(message, sendTimeoutMillis);
       lastCommunicationTime = System.currentTimeMillis();
     }
   }
@@ -4839,8 +4814,6 @@ public final class LDAPConnection
    */
   void setClosed()
   {
-    needsReconnect.set(false);
-
     if (disconnectInfo.get() == null)
     {
       try
@@ -4902,11 +4875,6 @@ public final class LDAPConnection
             @NotNull final ResponseAcceptor responseAcceptor)
        throws LDAPException
   {
-    if (needsReconnect.compareAndSet(true, false))
-    {
-      reconnect();
-    }
-
     final LDAPConnectionInternals internals = connectionInternals;
     if (internals == null)
     {

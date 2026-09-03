@@ -1395,10 +1395,7 @@ public final class SearchRequest
 
     if (connection.synchronousMode())
     {
-      @SuppressWarnings("deprecation")
-      final boolean autoReconnect =
-           connection.getConnectionOptions().autoReconnect();
-      return processSync(connection, depth, autoReconnect);
+      return processSync(connection, depth);
     }
 
     final long requestTime = System.nanoTime();
@@ -1699,10 +1696,6 @@ public final class SearchRequest
    * @param  depth       The current referral depth for this request.  It should
    *                     always be one for the initial request, and should only
    *                     be incremented when following referrals.
-   * @param  allowRetry  Indicates whether the request may be re-tried on a
-   *                     re-established connection if the initial attempt fails
-   *                     in a way that indicates the connection is no longer
-   *                     valid and autoReconnect is true.
    *
    * @return  An LDAP result object that provides information about the result
    *          of the search processing.
@@ -1712,7 +1705,7 @@ public final class SearchRequest
    */
   @NotNull()
   private SearchResult processSync(@NotNull final LDAPConnection connection,
-                                   final int depth, final boolean allowRetry)
+                                   final int depth)
           throws LDAPException
   {
     // Create the LDAP message.
@@ -1734,26 +1727,7 @@ public final class SearchRequest
     }
 
     connection.getConnectionStatistics().incrementNumSearchRequests();
-    try
-    {
-      connection.sendMessage(message, responseTimeout);
-    }
-    catch (final LDAPException le)
-    {
-      Debug.debugException(le);
-
-      if (allowRetry)
-      {
-        final SearchResult retryResult = reconnectAndRetry(connection, depth,
-             le.getResultCode(), 0, 0);
-        if (retryResult != null)
-        {
-          return retryResult;
-        }
-      }
-
-      throw le;
-    }
+    connection.sendMessage(message, responseTimeout);
 
     final ArrayList<SearchResultEntry> entryList;
     final ArrayList<SearchResultReference> referenceList;
@@ -1788,16 +1762,6 @@ public final class SearchRequest
           connection.abandon(messageID);
         }
 
-        if (allowRetry)
-        {
-          final SearchResult retryResult = reconnectAndRetry(connection, depth,
-               le.getResultCode(), numEntries, numReferences);
-          if (retryResult != null)
-          {
-            return retryResult;
-          }
-        }
-
         throw le;
       }
 
@@ -1815,17 +1779,6 @@ public final class SearchRequest
       }
       else if (response instanceof ConnectionClosedResponse)
       {
-
-        if (allowRetry)
-        {
-          final SearchResult retryResult = reconnectAndRetry(connection, depth,
-               ResultCode.SERVER_DOWN, numEntries, numReferences);
-          if (retryResult != null)
-          {
-            return retryResult;
-          }
-        }
-
         final ConnectionClosedResponse ccr =
              (ConnectionClosedResponse) response;
         final String msg = ccr.getMessage();
@@ -1929,77 +1882,11 @@ public final class SearchRequest
       }
       else
       {
-        final SearchResult result = (SearchResult) response;
-        if (allowRetry)
-        {
-          final SearchResult retryResult = reconnectAndRetry(connection,
-               depth, result.getResultCode(), numEntries, numReferences);
-          if (retryResult != null)
-          {
-            return retryResult;
-          }
-        }
-
         return handleResponse(connection, response, requestTime, depth,
                               numEntries, numReferences, entryList,
                               referenceList, intermediateResultCode);
       }
     }
-  }
-
-
-
-  /**
-   * Attempts to re-establish the connection and retry processing this request
-   * on it.
-   *
-   * @param  connection     The connection to be re-established.
-   * @param  depth          The current referral depth for this request.  It
-   *                        should always be one for the initial request, and
-   *                        should only be incremented when following referrals.
-   * @param  resultCode     The result code for the previous operation attempt.
-   * @param  numEntries     The number of search result entries already sent for
-   *                        the search operation.
-   * @param  numReferences  The number of search result references already sent
-   *                        for the search operation.
-   *
-   * @return  The result from re-trying the search, or {@code null} if it could
-   *          not be re-tried.
-   */
-  @Nullable()
-  private SearchResult reconnectAndRetry(
-                            @NotNull final LDAPConnection connection,
-                            final int depth,
-                            @NotNull final ResultCode resultCode,
-                            final int numEntries,
-                            final int numReferences)
-  {
-    try
-    {
-      // We will only want to retry for certain result codes that indicate a
-      // connection problem.
-      switch (resultCode.intValue())
-      {
-        case ResultCode.SERVER_DOWN_INT_VALUE:
-        case ResultCode.DECODING_ERROR_INT_VALUE:
-        case ResultCode.CONNECT_ERROR_INT_VALUE:
-          // We want to try to re-establish the connection no matter what, but
-          // we only want to retry the search if we haven't yet sent any
-          // results.
-          connection.reconnect();
-          if ((numEntries == 0) && (numReferences == 0))
-          {
-            return processSync(connection, depth, false);
-          }
-          break;
-      }
-    }
-    catch (final Exception e)
-    {
-      Debug.debugException(e);
-    }
-
-    return null;
   }
 
 
